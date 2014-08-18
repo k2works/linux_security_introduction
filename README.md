@@ -732,6 +732,68 @@ Smurf攻撃対策
 # system-config-firewall
 ```
 ## <a name="6">SELinux</a>
+### SELinuxの概要
+#### セキュリティコンテキスト
+ファイルのセキュリティコンテキストを表示
+```bash
+# ls -lZ /etc/inittab
+-rw-r--r--. root root system_u:object_r:etc_t:s0       /etc/inittab
+```
+プロセスのセキュリティコンテキストを表示
+```bash
+# ps -Z
+LABEL                             PID TTY          TIME CMD
+unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023 12671 pts/1 00:00:00 su
+unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023 12675 pts/1 00:00:00 bash
+unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023 12963 pts/1 00:00:00 ps
+```
+ユーザーのセキュリティコンテキストを表示
+```bash
+# id -Z
+unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+```
+#### 動作モード
+SELinuxの動作モードを表示
+```
+# getenforce
+```
+SELinuxをPermissiveモードに変更
+```bash
+# setenforce permissive
+```
+#### ポリシー
+SELinuxの状況を確認
+```bash
+# sestatus
+SELinux status:                 enabled
+SELinuxfs mount:                /selinux
+Current mode:                   permissive
+Mode from config file:          permissive
+Policy version:                 24
+Policy from config file:        targeted
+```
+### SELinuxの設定
+#### 論理パラメータの設定
+論理パラメータの確認
+```bash
+# getsebool -a
+```
+httpd_enable_homedirsの確認
+```bash
+# getsebool httpd_enable_homedirs
+httpd_enable_homedirs --> off
+```
+httpd_enable_homedirsをonにする
+```bash
+# setsebool httpd_enable_homedirs on
+```
+httpd_enable_homedirsを永続的にonにする
+```bash
+# setsebool -P httpd_enable_homedirs on
+```
+#### ファイルのセキュリティコンテキストの変更
+#### ファイルのコピーとバックアップ
+
 ## <a name="7">システムログの管理</a>
 ## <a name="8">セキュリティチェックと侵入探知</a>
 ## <a name="9">DNSサーバーのセキュリティ</a>
