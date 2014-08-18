@@ -5,7 +5,8 @@ Linuxセキュリティ入門
 | ソフトウェア     | バージョン    | 備考         |
 |:---------------|:-------------|:------------|
 | OS X           |10.8.5        |             |
-|           　　　|        |             |
+| vagrant   　　　|1.6.3         |             |
+| centOS         |6.5           |             |
 
 # 構成
 + [セットアップ](#1)
@@ -499,6 +500,237 @@ Enter passphrase:
 # mount /dev/mapper/secret /mnt/secret
 ```
 ## <a name="5">ネットワークのセキュリティ</a>
+### ネットワークの基本設定
+NetworkManagerの無効化
+```bash
+# service NetworkManager stop
+# chkconfig NetworkManager off
+```
+#### ネットワーク設定ファイル
++ _/etc/sysconfig/network_
++ _/etc/sysconfig/network-scripts/ifcfg-eth0_
++ _/etc/resolv.conf_
+
+#### /etc/hosts
+```bash
+# cat /etc/hosts
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+```
+#### 基本的なネットワーク管理コマンド
+##### networkサービスの制御
+```bash
+# service network restart
+Shutting down interface eth0:                              [  OK  ]
+Shutting down interface eth1:                              [  OK  ]
+Shutting down loopback interface:                          [  OK  ]
+Bringing up loopback interface:                            [  OK  ]
+Bringing up interface eth0:
+Determining IP information for eth0... done.
+                                                           [  OK  ]
+Bringing up interface eth1:  Determining if ip address 192.168.33.10 is already in use for device eth1...
+                                                           [  OK  ]
+```
+##### ifconfigコマンド
+```bash
+# ifconfig
+eth0      Link encap:Ethernet  HWaddr 08:00:27:CE:08:3D
+          inet addr:10.0.2.15  Bcast:10.0.2.255  Mask:255.255.255.0
+          inet6 addr: fe80::a00:27ff:fece:83d/64 Scope:Link
+          UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+          RX packets:161484 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:48241 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1000
+          RX bytes:225858498 (215.3 MiB)  TX bytes:2657587 (2.5 MiB)
+
+eth1      Link encap:Ethernet  HWaddr 08:00:27:3C:3C:85
+          inet addr:192.168.33.10  Bcast:192.168.33.255  Mask:255.255.255.0
+          inet6 addr: fe80::a00:27ff:fe3c:3c85/64 Scope:Link
+          UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+          RX packets:15690 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:11425 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1000
+          RX bytes:1257222 (1.1 MiB)  TX bytes:1885481 (1.7 MiB)
+
+lo        Link encap:Local Loopback
+          inet addr:127.0.0.1  Mask:255.0.0.0
+          inet6 addr: ::1/128 Scope:Host
+          UP LOOPBACK RUNNING  MTU:16436  Metric:1
+          RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:0 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:0
+          RX bytes:0 (0.0 b)  TX bytes:0 (0.0 b)
+```
+##### netstatコマンド
+```bash
+# netstat
+Active Internet connections (w/o servers)
+Proto Recv-Q Send-Q Local Address               Foreign Address             State
+tcp        0      0 192.168.33.10:20022         192.168.33.1:56265          ESTABLISHED
+Active UNIX domain sockets (w/o servers)
+Proto RefCnt Flags       Type       State         I-Node Path
+unix  7      [ ]         DGRAM                    10077  /dev/log
+unix  2      [ ]         DGRAM                    8476   @/org/kernel/udev/udevd
+unix  2      [ ]         DGRAM                    58047
+unix  2      [ ]         DGRAM                    56940
+unix  3      [ ]         STREAM     CONNECTED     45780
+unix  3      [ ]         STREAM     CONNECTED     45779
+unix  2      [ ]         DGRAM                    45776
+unix  2      [ ]         DGRAM                    33262
+unix  2      [ ]         DGRAM                    11248
+unix  3      [ ]         DGRAM                    8495
+unix  3      [ ]         DGRAM                    8494
+```
+開いているTCPポートを確認
+```bash
+# netstat -at
+Active Internet connections (servers and established)
+Proto Recv-Q Send-Q Local Address               Foreign Address             State
+tcp        0      0 *:sunrpc                    *:*                         LISTEN
+tcp        0      0 *:20022                     *:*                         LISTEN
+tcp        0      0 *:40095                     *:*                         LISTEN
+tcp        0      0 192.168.33.10:20022         192.168.33.1:56265          ESTABLISHED
+tcp        0      0 *:sunrpc                    *:*                         LISTEN
+tcp        0      0 *:50162                     *:*                         LISTEN
+tcp        0      0 *:20022                     *:*                         LISTEN
+```
+##### pigコマンド
+pingコマンドの実行例
+```bash
+# ping 192.168.33.1
+PING 192.168.33.1 (192.168.33.1) 56(84) bytes of data.
+64 bytes from 192.168.33.1: icmp_seq=1 ttl=64 time=0.220 ms
+64 bytes from 192.168.33.1: icmp_seq=2 ttl=64 time=0.243 ms
+```
+ICMPパケットを３回送信
+```bash
+# ping -c 3 192.168.33.1
+PING 192.168.33.1 (192.168.33.1) 56(84) bytes of data.
+64 bytes from 192.168.33.1: icmp_seq=1 ttl=64 time=0.155 ms
+64 bytes from 192.168.33.1: icmp_seq=2 ttl=64 time=0.187 ms
+64 bytes from 192.168.33.1: icmp_seq=3 ttl=64 time=0.507 ms
+
+--- 192.168.33.1 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2002ms
+rtt min/avg/max/mdev = 0.155/0.283/0.507/0.158 ms
+```
+192.168.0.0/24のホストにICMPパケットを送信
+```bash
+# ping -b 192.168.11.255
+```
+##### tracerouteコマンド
+```
+# yum -y install traceroute
+# traceroute www.centos.org
+```
+##### hostコマンド
+```bash
+# yum -y install bind-utils
+# host sv1.lpi.jp
+sv1.lpi.jp has address 203.174.74.34
+# host 203.174.74.34
+34.74.174.203.in-addr.arpa domain name pointer sv1.lpi.jp.
+```
+#### ネットワーク探査対策
+ICMPパケットを無視
+```bash
+# echo "1" > /proc/sys/net/ipv4/icmp_echo_ignore_all
+```
+プロードキャスト宛のICMPパケットのみ無視
+```bash
+# echo "1" > /proc/sys/net/ipv4/icmp_echo_ignore_broadcasts
+```
+永続的に設定する場合は以下を追加  
+_/etc/sysctl.conf_
+```bash
+net.ipv4.icmp_echo_ignore_broadcasts="1"
+```
+### ファイアウォール
+#### iptablesコマンド
+INPUTチェインにルールを追加
+```bash
+# iptables -A INPUT -p tcp -s 192.168.0.0/24 --dport 22 -j ACCEPT
+```
+INPUTチェインの２番めのルールを削除
+```bash
+# iptables -D INPUT 2
+```
+INPUTチェインの全ルールを削除
+```bash
+# iptables -F INPUT
+```
+iptableの設定を保存
+```bash
+# service iptables save
+iptables: Saving firewall rules to /etc/sysconfig/iptables:[  OK  ]
+```
+iptablesの設定を適用
+```bash
+# service iptables start
+iptables: Applying firewall rules:                         [  OK  ]
+```
+iptables-saveコマンドで設定を保存
+```bash
+# iptables-save > /etc/iptables.tmp
+```
+/etc/iptables.tmpから設定をリストア
+```bash
+# iptables-restore < /etc/iptables.tmp
+```
+#### 基本的なパケットフィルタリングの設定
+```bash
+# iptables -A INPUT -p tcp -d 192.168.33.10 --dport 20022 -j ACCEPT
+# iptables -A INPUT -p tcp -d 192.168.33.10 --dport 22 -j ACCEPT
+# iptables -A INPUT -p tcp -d 192.168.33.10 --dport 25 -j ACCEPT
+# iptables -A INPUT -p tcp -d 192.168.33.10 --dport 53 -j ACCEPT
+# iptables -A INPUT -p udp -d 192.168.33.10 --dport 53 -j ACCEPT
+# iptables -A INPUT -p tcp -d 192.168.33.10 --dport 80 -j ACCEPT
+# iptables -A INPUT -p tcp -d 192.168.33.10 --dport 110 -j ACCEPT
+# iptables -A INPUT -i lo -j ACCEPT
+# iptables -A INPUT -p icmp -j ACCEPT
+# iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+# iptables -P OUTPUT ACCEPT
+# iptables -P FORWARD DROP
+# iptables -P INPUT DROP
+# service iptables save
+iptables: Saving firewall rules to /etc/sysconfig/iptables:[  OK  ]
+```
+#### iptablesの応用
+マッチするパケットをログに記録
+```bash
+# iptables -A INPUT -s 192.168.33.0/24 -j LOG
+```
+192.168.33.20からのパケットをログに記録して拒否
+```bash
+# iptables -A INPUT -s 192.168.33.20 -j LOG
+# iptables -A INPUT -s 192.168.33.20 -j DROP
+```
+192.168.33.20からのパケットをメッセージ付きでログに記録して拒否
+```bash
+# iptables -A INPUT -s 192.168.33.20 -j LOG --log-prefix "Droped IP :"
+# iptables -A INPUT -s 192.168.33.20 -j DROP
+```
+IP偽装対策
+```bash
+# iptables -A INPUT -s 10.0.0.0/8 -j DROP
+# iptables -A INPUT -s 172.16.0.0/12 -j DROP
+# iptables -A INPUT -s 192.168.0.0/16 -j DROP
+# iptables -A INPUT -s 127.0.0.0/8 -j DROP
+# iptables -A INPUT -s 169.254.0.0/16 -j DROP
+# iptables -A INPUT -s 192.0.2.0/24 -j DROP
+# iptables -A INPUT -s 224.0.0.0/4 -j DROP
+# iptables -A INPUT -s 240.0.0.0/5 -j DROP
+```
+Smurf攻撃対策
+```bash
+# iptables -A INPUT -d 0.0.0.0/8 -j DROP
+# iptables -A INPUT -d 255.255.255.255 -j DROP
+```
+#### CUIツールによるパケットフィルタリング設定
+```bash
+# yum install system-config-firewall
+# system-config-firewall
+```
 ## <a name="6">SELinux</a>
 ## <a name="7">システムログの管理</a>
 ## <a name="8">セキュリティチェックと侵入探知</a>
