@@ -136,8 +136,191 @@ target     prot opt source               destination
 Chain OUTPUT (policy ACCEPT)
 target     prot opt source               destination
 ```
+作業ユーザーでログインした後rootになる
+```bash
+# exit
+$ ssh -p 20022 centuser@192.168.33.10
+centuser@192.168.33.10's password:sysop
+$ su
+パスワード:vagrant
+```
 
 ## <a name="3">OSのセキュリティ</a>
+### ソフトウェアの更新
+#### YUMを利用するための準備
+デフォルトのGPG公開鍵のインポート
+```bash
+# rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-6
+```
+サードパーティのリポジトリ追加
+```bash
+# rpm --import http://ftp.riken.jp/Linux/fedora/epel/RPM-GPG-KEY-EPEL-6
+# rpm -ivh  http://ftp-srv2.kddilabs.jp/Linux/distributions/fedora/epel/6/i386/epel-release-6-8.noarch.rpm
+# rpm --import http://apt.sw.be/RPM-GPG-KEY.dag.txt
+# rpm -ivh http://pkgs.repoforge.org/rpmforge-release/rpmforge-release-0.5.3-1.el6.rf.x86_64.rpm
+```
+#### YUMの設定
+_/etc/yum.repos.d/CentOS-Base.repo_
+#### YUMの基本操作
+```bash
+# yum update
+# yum install httpd
+# yum update httpd
+# yum remove httpd
+# yum info httpd
+# yum groupinstall "Development tools"
+```
+#### システムの自動的な更新
+```bash
+# yum install yum-cron
+# service yum-cron start
+# chkconfig yum-cron on
+```
+設定ファイル：_/etc/sysconfig/yum-cron_
+
+### ユーザーアカウントの管理
+#### 一般ユーザーのログイン管理
+ユーザーをロック
+```bash
+usermod -L fred
+```
+ユーザーロックを解除
+```
+usermod -U fred
+```
+#### rootログインの禁止
+```bash
+# echo > /etc/securetty
+```
+#### suコマンドの利用
+suコマンドを使えるユーザーを制限する  
+_etc/pam.d/su_
+```
+auth            required        pam_wheel.so use_uid
+```
+wheelグループへcentuserユーザーを登録
+```bash
+# usermod -G wheel centuser
+```
+#### root権限の利用
+```bash
+# visudo
+```
+_/etc/sudoers_
+```
+## Allows people in group wheel to run all commands
+%wheel  ALL=(ALL)       ALL
+```
+#### パスワードの管理
+パスワードに有効期限を設定する
+```bash
+# chage centuser
+```
+パスワード有効期限の確認
+```bash
+# chage -l centuser
+```
+### サービス管理
+#### 不要なサービスの停止
+開いているポートの確認
+```bash
+# netstat -antup
+```
+不要なサービスの停止
+```bash
+# service avahi-daemon stop
+# service portresvere stop
+```
+不要なサービスのデフォルト起動を停止
+```bash
+# chkconfig avahi-daemon off
+# chkconfig portreserve off
+```
+#### xinetd
+xinetdのインストール
+```bash
+# yum install xinetd
+```
+rsyncサービスを有効化
+```bash
+# yum install rsync
+# chkconfig rsync on
+```
+xinetdベースのサービス設定ファイル  
+_/etc/xinetd.d_
+```bash
+# ls -al /etc/xinetd.d/
+合計 56
+drwxr-xr-x.  2 root root 4096  8月 18 03:41 2014 .
+drwxr-xr-x. 62 root root 4096  8月 18 03:37 2014 ..
+-rw-------.  1 root root 1157 10月  7 17:35 2013 chargen-dgram
+-rw-------.  1 root root 1159 10月  7 17:35 2013 chargen-stream
+-rw-------.  1 root root 1157 10月  7 17:35 2013 daytime-dgram
+-rw-------.  1 root root 1159 10月  7 17:35 2013 daytime-stream
+-rw-------.  1 root root 1157 10月  7 17:35 2013 discard-dgram
+-rw-------.  1 root root 1159 10月  7 17:35 2013 discard-stream
+-rw-------.  1 root root 1148 10月  7 17:35 2013 echo-dgram
+-rw-------.  1 root root 1150 10月  7 17:35 2013 echo-stream
+-rw-r--r--.  1 root root  332 10月 23 08:29 2013 rsync
+-rw-------.  1 root root 1212 10月  7 17:35 2013 tcpmux-server
+-rw-------.  1 root root 1149 10月  7 17:35 2013 time-dgram
+-rw-------.  1 root root 1150 10月  7 17:35 2013 time-stream
+```
+### TCP Wrapper
+#### TCP Wrapperの基本設定
+libwrapライブラリにリンクしているかの確定
+```bash
+# ldd /usr/sbin/sshd | grep libwrap
+        libwrap.so.0 => /lib64/libwrap.so.0 (0x00007fdb597d9000)
+```
+_/etc/hosts.allow_ファイルの記述例
+```
+sshd: .lpic.jp
+ALL: 192.168.2.
+```
+_/etc/hosts.deny_ファイルの記述例
+```
+ALL:ALL
+```
+### プロセスの監視
+#### psコマンドによるプロセス監視
+プロセスを表示する
+```bash
+# ps
+```
+全てのプロセスを表示する
+```bash
+# ps aux
+```
+#### topコマンドによるプロセスとシステムの監視
+終了は「Q」
+```bash
+# top
+```
+### ウイスル対策
+#### Clam AntiVirusのインストール
+インストール
+```
+# yum install clamav
+```
+ウィルスデータベースをアップデート
+```
+# freshclam
+```
+#### ウイルスのスキャン
+ウイルススキャンの実行
+```bash
+# cd /home
+# clamscan -r
+```
+ウイルス発見時のメッセージ
+```bash
+/tmp/eicar.com: Eicar-Test-Signature FOUND
+```
+ウイルスの自動削除
+```bash
+# clamscan --remove
+```
 ## <a name="4">ファイルシステムのセキュリティ</a>
 ## <a name="5">ネットワークのセキュリティ</a>
 ## <a name="6">SELinux</a>
