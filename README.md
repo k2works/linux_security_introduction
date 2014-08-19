@@ -1007,10 +1007,259 @@ watchfor /Failed \(login|password\)/i
 ```
 バックグラウンドでswatchを実行
 ```
-#
+# swatch -c .swatchrc -t /var/log/secure --daemon
+```
+## <a name="8">セキュリティチェックと侵入探知</a>
+### ポートスキャンとパケットキャプチャ
+#### nmap
+nmapのインストール
+```bash
+# yum -y install nmap
+```
+192.168.33.20をポートスキャン
+```bash
+$ nmap 192.168.33.20
+
+Starting Nmap 5.51 ( http://nmap.org ) at 2014-08-19 01:43 UTC
+Nmap scan report for 192.168.33.20
+Host is up (0.0040s latency).
+Not shown: 998 closed ports
+PORT    STATE SERVICE
+22/tcp  open  ssh
+111/tcp open  rpcbind
+
+Nmap done: 1 IP address (1 host up) scanned in 0.25 seconds
+```
+サーバーソフトウェアの詳細を調べる
+```bash
+$ nmap -A 192.168.33.20
+
+Starting Nmap 5.51 ( http://nmap.org ) at 2014-08-19 01:45 UTC
+Nmap scan report for 192.168.33.20
+Host is up (0.0031s latency).
+Not shown: 998 closed ports
+PORT    STATE SERVICE VERSION
+22/tcp  open  ssh     OpenSSH 5.3 (protocol 2.0)
+| ssh-hostkey: 1024 5e:98:a6:5a:e4:1d:61:9a:31:97:1e:8b:68:d5:92:82 (DSA)
+|_2048 c4:4d:f9:05:09:31:33:05:cd:99:52:5b:fc:e0:10:b5 (RSA)
+111/tcp open  rpcbind
+
+Service detection performed. Please report any incorrect results at http://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 6.64 seconds
+```
+Xmasツリースキャン
+```bash
+$ sudo nmap -sX 192.168.33.20
+
+Starting Nmap 5.51 ( http://nmap.org ) at 2014-08-19 01:55 UTC
+Nmap scan report for 192.168.33.20
+Host is up (0.0010s latency).
+Not shown: 998 closed ports
+PORT    STATE         SERVICE
+22/tcp  open|filtered ssh
+111/tcp open|filtered rpcbind
+MAC Address: 08:00:27:2F:7D:D6 (Cadmus Computer Systems)
+
+Nmap done: 1 IP address (1 host up) scanned in 2.44 seconds
+```
+全てのポートをスキャン
+```
+$ nmap -p 0-65535 192.168.33.20
+
+Starting Nmap 5.51 ( http://nmap.org ) at 2014-08-19 01:57 UTC
+Nmap scan report for 192.168.33.20
+Host is up (0.0022s latency).
+Not shown: 65533 closed ports
+PORT      STATE SERVICE
+22/tcp    open  ssh
+111/tcp   open  rpcbind
+35186/tcp open  unknown
+
+Nmap done: 1 IP address (1 host up) scanned in 10.84 seconds
+```
+1023番までと60000番以降のポートをスキャン
+```bash
+$ nmap -p -01023,60000- 192.168.33.20
+
+Starting Nmap 5.51 ( http://nmap.org ) at 2014-08-19 01:58 UTC
+Nmap scan report for 192.168.33.20
+Host is up (0.0037s latency).
+Not shown: 6557 closed ports
+PORT    STATE SERVICE
+22/tcp  open  ssh
+111/tcp open  rpcbind
+
+Nmap done: 1 IP address (1 host up) scanned in 1.15 seconds
+```
+#### tcpdump
+53番ポートへのアクセスの監視  
+```bash
+$ sudo tcpdump -nli eth0 port 53
+tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+listening on eth0, link-type EN10MB (Ethernet), capture size 65535 bytes
+02:16:00.932490 IP 10.0.2.15.51321 > 8.8.8.8.domain: 37346+ A? www.yahoo.com. (31)
+02:16:00.932765 IP 10.0.2.15.51321 > 8.8.8.8.domain: 62438+ AAAA? www.yahoo.com. (31)
+```
+53番ポートの通信内容を表示
+```bash
+$ sudo tcpdump -X -i eth0 port 53
+tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+listening on eth0, link-type EN10MB (Ethernet), capture size 65535 bytes
+02:23:59.481956 IP 10.0.2.15.42014 > google-public-dns-a.google.com.domain: 36744+ A? www.yahoo.co.jp. (33)
+        0x0000:  4500 003d 2aa6 4000 4011 f3eb 0a00 020f  E..=*.@.@.......
+        0x0010:  0808 0808 a41e 0035 0029 1c59 8f88 0100  .......5.).Y....
+        0x0020:  0001 0000 0000 0000 0377 7777 0579 6168  .........www.yah
+        0x0030:  6f6f 0263 6f02 6a70 0000 0100 01         oo.co.jp.....
+```
+ICMPパケットを監視
+```bash
+$ sudo tcpdump -nli eth0 proto \\icmp
+tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+listening on eth0, link-type EN10MB (Ethernet), capture size 65535 bytes
+```
+telnet接続を監視
+```bash
+$ sudo tcpdump -nli eth0 port 23
+tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+listening on eth0, link-type EN10MB (Ethernet), capture size 65535 bytes
+```
+### Tripwire
+#### Tripwireの設定
+Tripwireのインストール
+```bash
+# yum install tripwire
+```
+サイトキーとローカルキーの生成
+```
+# tripwire-setup-keyfiles
+```
+#### Tripwireの設定
+Tripwireの設定ファイル等(_/etc/tripwire/_)
+
+|  ファイル名  | 説明         |
+|:---------------|:-------------|
+| tw.cfg         | Tripwireの全体設定ファイル|
+| twcfg.txt      | 全体設定ファイルのひな形|
+| tw.pl          | ポリシーファイル|
+| twpol.txt      | ポリシーファイルのひな形|
+| site.key       | サイトキーファイル|
+| ホスト名.local.key   | ホストキーファイル|
+
+tw.cfgファイルの生成
+```bash
+# cd /etc/tripwire/
+# twadmin -m F -c tw.cfg -S site.key twcfg.txt
+Please enter your site passphrase:
+Wrote configuration file: /etc/tripwire/tw.cfg
+```
+tw.polファイルの生成
+```bash
+# twadmin -m P -S site.key twpol.txt
+Please enter your site passphrase:
+Wrote policy file: /etc/tripwire/tw.pol
+```
+#### Tripwireの運用
+ベースラインデータベースの初期化
+```bash
+# tripwire --init
+Please enter your local passphrase:
+Parsing policy file: /etc/tripwire/tw.pol
+Generating the database...
+```
+tw.polファイルの再生性とベースラインデータベースの再作成
+```bash
+# twadmin -m P -S site.key twpol.txt
+Please enter your site passphrase:
+Wrote policy file: /etc/tripwire/tw.pol
+# tripwire --init
+Please enter your local passphrase:
+Parsing policy file: /etc/tripwire/tw.pol
+Generating the database...
+```
+改ざんチェック
+```bash
+# tripwire --check
+```
+レポートの表示
+```bash
+# twprint -m r -r /var/lib/tripwire/report/host1-20140819-031031.twr
+```
+ベースラインデータベースのアップデート
+```bash
+# tripwire -m u -r /var/lib/tripwire/report/host1-20140819-031031.twr
+```
+### Rootkit Humterとfail2banの利用
+#### Rootkit Hunter
+Rootkit Hunterのインストール
+```bash
+# yum install rkhunter
+```
+rootkitデータベースのアップデート
+```bash
+# rkhunter --update
+[ Rootkit Hunter version 1.4.2 ]
+
+Checking rkhunter data files...
+  Checking file mirrors.dat                                  [ No update ]
+  Checking file programs_bad.dat                             [ No update ]
+  Checking file backdoorports.dat                            [ No update ]
+  Checking file suspscan.dat                                 [ Updated ]
+  Checking file i18n/cn                                      [ No update ]
+  Checking file i18n/de                                      [ Updated ]
+  Checking file i18n/en                                      [ No update ]
+  Checking file i18n/tr                                      [ Updated ]
+  Checking file i18n/tr.utf8                                 [ Updated ]
+  Checking file i18n/zh                                      [ Updated ]
+  Checking file i18n/zh.utf8                                 [ Updated ]
+```
+Rootkit Hunterの実行
+```bash
+# rkhunter --check
+```
+#### fail2ban
+fail2banのインストール
+```bash
+# yum install fail2ban
+```
++ 設定ファイル_/etc/fail2ban/fail2ban.conf_  
++ jailの設定_/etc/fail2ban/jail.conf_  
+
+fail2banの起動
+```bash
+# service fail2ban start
+```
+iptablesによるfail2banの確認
+```bash
+# iptables -L
+Chain INPUT (policy ACCEPT)
+target     prot opt source               destination
+fail2ban-SSH  tcp  --  anywhere             anywhere            tcp dpt:ssh
+
+Chain FORWARD (policy ACCEPT)
+target     prot opt source               destination
+
+Chain OUTPUT (policy ACCEPT)
+target     prot opt source               destination
+
+Chain fail2ban-SSH (1 references)
+target     prot opt source               destination
+REJECT     all  --  192.168.33.20        anywhere            reject-with icmp-port-unreachable
+RETURN     all  --  anywhere             anywhere
+```
+ssh-iptablesの状況を表示
+```bash
+# fail2ban-client status ssh-iptables
+Status for the jail: ssh-iptables
+|- filter
+|  |- File list:        /var/log/secure
+|  |- Currently failed: 1
+|  `- Total failed:     6
+`- action
+   |- Currently banned: 1
+   |  `- IP list:       192.168.33.20
+   `- Total banned:     1
 ```
 
-## <a name="8">セキュリティチェックと侵入探知</a>
 ## <a name="9">DNSサーバーのセキュリティ</a>
 ## <a name="10">Webサーバーのセキュリティ</a>
 ## <a name="11">メールサーバーのセキュリティ</a>
@@ -1020,3 +1269,4 @@ watchfor /Failed \(login|password\)/i
 # 参照
 + [Linuxサーバーセキュリティ徹底入門](http://www.amazon.co.jp/Linux%E3%82%B5%E3%83%BC%E3%83%90%E3%83%BC%E3%82%BB%E3%82%AD%E3%83%A5%E3%83%AA%E3%83%86%E3%82%A3%E5%BE%B9%E5%BA%95%E5%85%A5%E9%96%80-%E3%83%BC%E3%83%97%E3%83%B3%E3%82%BD%E3%83%BC%E3%82%B9%E3%81%AB%E3%82%88%E3%82%8B%E3%82%B5%E3%83%BC%E3%83%90%E3%83%BC%E9%98%B2%E8%A1%9B%E3%81%AE%E5%9F%BA%E6%9C%AC-%E4%B8%AD%E5%B3%B6-%E8%83%BD%E5%92%8C/dp/4798132381)
 + [Vagrant + シェルスクリプトで簡単プロビジョニング](http://www.ryuzee.com/contents/blog/6667)
++ [Vagrant で複数のVM を立ち上げて、お互いに通信できるようにするには](http://qiita.com/sho7650/items/cf5a586713f0aec86dc0)
