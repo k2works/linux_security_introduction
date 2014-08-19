@@ -795,6 +795,221 @@ httpd_enable_homedirsを永続的にonにする
 #### ファイルのコピーとバックアップ
 
 ## <a name="7">システムログの管理</a>
+### システムログの概要
+#### rsyslogの設定
+_/etc/rsyslog.conf_
+```bash
+# cat /etc/rsyslog.conf
+# rsyslog v5 configuration file
+
+# For more information see /usr/share/doc/rsyslog-*/rsyslog_conf.html
+# If you experience problems, see http://www.rsyslog.com/doc/troubleshoot.html
+
+#### MODULES ####
+
+$ModLoad imuxsock # provides support for local system logging (e.g. via logger command)
+$ModLoad imklog   # provides kernel logging support (previously done by rklogd)
+#$ModLoad immark  # provides --MARK-- message capability
+
+# Provides UDP syslog reception
+#$ModLoad imudp
+#$UDPServerRun 514
+
+# Provides TCP syslog reception
+#$ModLoad imtcp
+#$InputTCPServerRun 514
+
+
+#### GLOBAL DIRECTIVES ####
+
+# Use default timestamp format
+$ActionFileDefaultTemplate RSYSLOG_TraditionalFileFormat
+
+# File syncing capability is disabled by default. This feature is usually not required,
+# not useful and an extreme performance hit
+#$ActionFileEnableSync on
+
+# Include all config files in /etc/rsyslog.d/
+$IncludeConfig /etc/rsyslog.d/*.conf
+
+
+#### RULES ####
+
+# Log all kernel messages to the console.
+# Logging much else clutters up the screen.
+#kern.*                                                 /dev/console
+
+# Log anything (except mail) of level info or higher.
+# Don't log private authentication messages!
+*.info;mail.none;authpriv.none;cron.none                /var/log/messages
+
+# The authpriv file has restricted access.
+authpriv.*                                              /var/log/secure
+
+# Log all the mail messages in one place.
+mail.*                                                  -/var/log/maillog
+
+
+# Log cron stuff
+cron.*                                                  /var/log/cron
+
+# Everybody gets emergency messages
+*.emerg                                                 *
+
+# Save news errors of level crit and higher in a special file.
+uucp,news.crit                                          /var/log/spooler
+
+# Save boot messages also to boot.log
+local7.*                                                /var/log/boot.log
+
+
+# ### begin forwarding rule ###
+# The statement between the begin ... end define a SINGLE forwarding
+# rule. They belong together, do NOT split them. If you create multiple
+# forwarding rules, duplicate the whole block!
+# Remote Logging (we use TCP for reliable delivery)
+#
+# An on-disk queue is created for this action. If the remote host is
+# down, messages are spooled to disk and sent when it is up again.
+#$WorkDirectory /var/lib/rsyslog # where to place spool files
+#$ActionQueueFileName fwdRule1 # unique name prefix for spool files
+#$ActionQueueMaxDiskSpace 1g   # 1gb space limit (use as much as possible)
+#$ActionQueueSaveOnShutdown on # save messages to disk on shutdown
+#$ActionQueueType LinkedList   # run asynchronously
+#$ActionResumeRetryCount -1    # infinite retries if host is down
+# remote host is: name/ip:port, e.g. 192.168.0.1:514, port optional
+#*.* @@remote-host:514
+# ### end of the forwarding rule ###
+```
+#### ログサーバーの設定
+ログを192.168.11.2のホストに送る(UDP)  
+```
+*.warning        @192.168.11.2
+```
+ログサーバーの/etc/rsyslog.confの設定(UDP)  
+```
+$ModLoad imudp.so
+$UDPServerRun 514
+```
+ログを192.168.11.2のホストに送る(TCP)  
+```
+*.warning        @192.168.11.2
+```
+ログサーバーの/etc/rsyslog.confの設定(TCP)  
+```
+$ModLoad imtcp.so
+$TCPServerRun 514
+```
+ログサーバーの/etc/rsyslog.confの設定(TCP 10514番ポート)  
+```
+$ModLoad imtcp.so
+$TCPServerRun 10514
+```
+ログを192.168.11.2のホストに送る(TCP 10514番ポート)
+```
+*.warning        @192.168.11.2:10514
+```
+#### ログのローテーション
+```
+# cat /etc/logrotate.conf
+# see "man logrotate" for details
+# rotate log files weekly
+weekly
+
+# keep 4 weeks worth of backlogs
+rotate 4
+
+# create new (empty) log files after rotating old ones
+create
+
+# use date as a suffix of the rotated file
+dateext
+
+# uncomment this if you want your log files compressed
+#compress
+
+# RPM packages drop log rotation information into this directory
+include /etc/logrotate.d
+
+# no packages own wtmp and btmp -- we'll rotate them here
+/var/log/wtmp {
+    monthly
+    create 0664 root utmp
+        minsize 1M
+    rotate 1
+}
+
+/var/log/btmp {
+    missingok
+    monthly
+    create 0600 root utmp
+    rotate 1
+}
+```
+### ログの監視
+#### ログファイルの監視
+|  ログファイル    | 説明         |
+|:---------------|:-------------|
+| var/log/message|システムの汎用ログファイル  |
+| var/log/secure |認証関連の記録 |
+| var/log/boot.log|サービスの起動／停止の記録 |
+| var/log/cron   |cronジョブの実行結果 |
+| var/log/dmesg  |カーネルが出力するメッセージの記録 |
+| var/log/lastlog|ログインの記録 |
+| var/log/maillog|メールサブシステムの記録 |
+| var/log/wtmp   |ログインの記録 |
+| var/log/yum.log|YUMによるパッケージ情報操作記録 |
+
+#### logwatch
+logwatchの確認  
+```bash
+$ rpm -q logwatch
+```
+logwatchのインストール  
+```bash
+$ yum install logwatch
+```
+設定ファイルは_/usr/share/logwatch/default.conf/logwatch.conf_
+
+#### swatch
+swatchのインストール  
+```bash
+# yum install swatch perl-File-Tail
+```
+_/root/.swatchrc_  
+```
+watchfor /Accepted password/
+  echo
+```
+swatchの起動
+```
+# swatch -c .swatchrc -t /var/log/secure
+
+*** swatch version 3.2.3 (pid:1200) started at 2014年  8月 19日 火曜日 01:06:24 UTC
+```
+swatchの設定
+```
+watchfor /パターン/
+      アクション
+```
+|  アクションの例  | 説明         |
+|:---------------|:-------------|
+| echo           |標準出力に出力する |
+| execコマンド    |指定したコマンドを実行する |
+| bell           |ベルを鳴らす(回数指定可能) |
+| mail addresses=メールアドレス,subject=件名 |指定したメールアドレスにメッセージを送信する |
+
+swatchの設定例
+```
+watchfor /Failed \(login|password\)/i
+  echo
+  mail root@localhost,subject="Failed Login"
+```
+バックグラウンドでswatchを実行
+```
+#
+```
+
 ## <a name="8">セキュリティチェックと侵入探知</a>
 ## <a name="9">DNSサーバーのセキュリティ</a>
 ## <a name="10">Webサーバーのセキュリティ</a>
