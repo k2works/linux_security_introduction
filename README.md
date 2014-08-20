@@ -1261,10 +1261,271 @@ Status for the jail: ssh-iptables
 ```
 
 ## <a name="9">DNSサーバーのセキュリティ</a>
+### BINDの基本設定
+#### BINDのインストール
+```bash
+# yum install bin bind-chroot
+```
+起動
+```bash
+# rndc-confgen -a -r /dev/urandom -t /var/named/chroot
+# service named start
+```
+#### rndcコマンド
+```bash
+# chmod o-rwx /etc/rndc.key
+```
+example.comゾーンを再度読み込み
+```bash
+# rndc reload example.com
+```
+設定ファイルと新規ゾーンのみ再読込
+```bash
+rndc reconfig
+```
+BINDの再起動
+```bash
+service named restart
+```
 ## <a name="10">Webサーバーのセキュリティ</a>
+### Apacheの基本
+#### Apacheのインストールと基本
+httpdパッケージの確認
+```bash
+# rpm -q httpd
+```
+Apacheと関連パッケージのインストール
+```bash
+# yum groupinstall "Web Server"
+```
+Apacheの設定ファイル
+
+|  ファイル名  | 説明         |
+|:---------------|:-------------|
+| /etc/httpd/conf/httpd.conf | メイン設定ファイル|
+| /etc/httpd/conf/magic | MIMEタイプの設定|
+| /etc/httpd/conf.d/manual.conf | オンラインマニュアルの設定|
+| /etc/httpd/conf.d/perl.conf| Perlの設定(mod_perlをインストールした場合)|
+| /etc/httpd/conf.d/php.conf| PHPの設定(mod_phpをインストールした場合)|
+| /etc/httpd/conf.d/ssl.conf| SSL/TLSの設定(mod_sslをインストールした場合)|
+
+Apacheを起動する
+```bash
+# service httpd start
+```
+設定の再読み込み
+```bash
+# service httpd reload
+```
+Apacheの再起動
+```bash
+# service httpd restart
+```
+Apacheの安全な再起動
+```bash
+# service httpd graceful
+```
+
 ## <a name="11">メールサーバーのセキュリティ</a>
+### メールサーバーの基礎
+#### Postfixのインストールと基本
+postfixパッケージの確認
+```bash
+# rpm -q postfix
+```
+#### Dovecotのインストールと基本
+dovecotパッケージの確認
+```bash
+# rpm -q dovecot
+```
+Dovecotのインストール
+```bash
+# yum install dovecot
+```
 ## <a name="12">FTPサーバーのセキュリティ</a>
+### FTPの基本
+lftpインストール
+```bash
+# yum install lftp
+```
+vsftpdのインストール
+```bash
+# yum install vsftpd
+# service vsftpd start
+```
+設定ファイルは_/etc/vsftpd/vsftpd.conf_  
+
 ## <a name="13">SSH</a>
+前提としてhost1とhost2にcentuserが存在すること
+
+### SSHの基本
+鍵のフィンガープリントを確認
+```bash
+# ssh-keygen -i
+```
+### 公開鍵の作成
+```bash
+$ ssh-keygen -t rsa
+Generating public/private rsa key pair.
+Enter file in which to save the key (/home/centuser/.ssh/id_rsa):
+Created directory '/home/centuser/.ssh'.
+Enter passphrase (empty for no passphrase):
+Enter same passphrase again:
+Your identification has been saved in /home/centuser/.ssh/id_rsa.
+Your public key has been saved in /home/centuser/.ssh/id_rsa.pub.
+The key fingerprint is:
+ce:0b:3f:79:82:9f:aa:ad:e2:4e:e8:2d:4b:38:44:ce centuser@host1
+The key's randomart image is:
++--[ RSA 2048]----+
+|                 |
+|                 |
+| .               |
+|+                |
+| E      S        |
+|o.     o         |
+|+..   ..o.       |
+|o+o  ..o+o.      |
+| ==ooooo=+       |
++-----------------+
+```
+公開鍵をサーバーに登録
+```bash
+$ ssh-copy-id centuser@192.168.33.20
+Could not open a connection to your authentication agent.
+centuser@192.168.33.20's password:
+Now try logging into the machine, with "ssh 'centuser@192.168.33.20'", and check in:
+
+  .ssh/authorized_keys
+
+to make sure we haven't added extra keys that you weren't expecting.
+```
+公開鍵認証を使ったSSHログイン
+```bash
+$ ssh 192.168.33.20
+```
+公開鍵ファイルをコピー
+```bash
+$ scp ~/.ssh/id_rsa.pub 192.168.33.20:publickey
+centuser@192.168.33.20's password:
+id_rsa.pub                                                                                                                 100%  396     0.4KB/s   00:00
+```
+192.168.33.20にSSHでログイン
+```
+$ ssh 192.168.33.20
+centuser@192.168.33.20's password:
+Last login: Wed Aug 20 08:22:04 2014 from 192.168.33.10
+```
+authorized_keysに公開鍵を登録
+```
+$ cat publickey >> ~/.ssh/authorized_keys
+```
+authorized_keysファイルのパーミッションを変更
+```bash
+$ chmod 600 ~/.ssh/authorized_keys
+```
+publickeyファイルを削除
+```bash
+$ rm publickey
+```
+### OpenSSHサーバー
+#### SSHサーバーの基本設定
+|  設定項目 | 説明         |
+|:---------------|:-------------|
+| Port | SSHで使うポート番号 |
+| Protocol | SSHのバージョン(１または２または両方) |
+| HostKey | ホストの秘密鍵ファイル |
+| PermitRootLogin | rootでもログインを許可するかどうか(yes,no,without-password,forced-commands-onlyのいずれか)|
+| RSAAuthentication | SSHバージョン１での公開鍵認証を使用するかどうか(yes,no)|
+| PubkeyAuthentication | SSHバージョン２での公開鍵認証を使用するかどうか(yes,no)|
+| AuthorizedKeysFile | 公開鍵が格納されるファイル名 |
+| PermitEmptyPasswords | 空のパスワードを許可するかどうか (yes,no) |
+| PasswordAuthentication | パスワード認証を許可するかどうか(yes,no) |
+| AllowUsers | 接続を許可するユーザーのリスト |
+| DenyUsers | 接続を拒否するユーザーのリスト |
+| LoginGraceTime | ログイン認証の待ち時間(デフォルトは120秒)|
+| MaxAuthTries | ログイン認証の最大再試行回数(デフォルトは6秒)|
+| UsePAM | PAM認証を利用するかどうか(yes,no)|
+
+設定変更後はSSHサーバーを再起動する
+```bash
+# service sshd restart
+```
+TCP Wrapperによるアクセス制御  
+/etc/hosts.denyの設定例  
+```
+ALL: ALL
+```
+/etc/hosts.allowの設定例  
+```
+sshd: 192.168.11.2 *.example.com
+```
+### SSHクライアント
+#### SSHリモートログイン
+指定したホストにSSHで接続
+```bash
+$ ssh 192.168.33.20
+```
+ユーザー名を指定して接続
+```
+$ ssh centuser@192.168.33.20
+```
+SSHでコマンドのみ実行
+```bash
+$ ssh 192.168.33.20 df
+```
+#### SSHリモートコピー
+リモートホストからローカルホストへのファイルコピー（１）
+```bash
+$ scp /etc/hosts 192.168.33.20:/tmp
+```
+リモートホストからローカルホストへのファイルコピー（２）
+```bash
+$ scp 192.168.33.20:/etc/hosts .
+```
+ユーザー名を指定したファイルコピー
+```bash
+$ touch data.txt
+$ scp data.txt centuser@192.168.33.20:
+```
+ポート番号を指定したファイルコピー
+```bash
+$ scp -P 22 /etc/hosts 192.168.33.20:/tmp
+```
+#### sftp
+```bash
+$ sftp 192.168.33.20
+```
+#### ポート転送
+SSHポート転送
+```bash
+$ ssh -f -N centuser@192.168.33.20 -L 10110:192.168.33.20:110
+```
+#### SSH Agent
+ssh-agentの利用を開始
+```bash
+$ ssh-agent bash
+```
+パスフレーズを登録
+```bash
+$ ssh-add
+Identity added: /home/centuser/.ssh/id_rsa (/home/centuser/.ssh/id_rsa)
+```
+秘密鍵の一覧を表示
+```bash
+$ ssh-add -l
+2048 ce:0b:3f:79:82:9f:aa:ad:e2:4e:e8:2d:4b:38:44:ce /home/centuser/.ssh/id_rsa (RSA)
+```
+#### SSHクライアントの設定
+_/etc/ssh/ssh_config_  
+|  設定項目 | 説明         |
+|:---------------|:-------------|
+| Port | ポート番号を指定する |
+| Protocol | 利用するSSHプロトコルバージョン |
+| PasswordAuthentication |  パスワード認証を使用するかどうか(yes,no)|
+| RSAAuthentication | 公開鍵認証を使用するかどうか(yes,no) |
+| IdentityFile | 秘密鍵ファイルを指定する |
+
+SSHログイン後に自動実行したいコマンドがある場合は_/etc/ssh/sshrc_または_~/.ssh/rc_ファイルに設定。
 
 # 参照
 + [Linuxサーバーセキュリティ徹底入門](http://www.amazon.co.jp/Linux%E3%82%B5%E3%83%BC%E3%83%90%E3%83%BC%E3%82%BB%E3%82%AD%E3%83%A5%E3%83%AA%E3%83%86%E3%82%A3%E5%BE%B9%E5%BA%95%E5%85%A5%E9%96%80-%E3%83%BC%E3%83%97%E3%83%B3%E3%82%BD%E3%83%BC%E3%82%B9%E3%81%AB%E3%82%88%E3%82%8B%E3%82%B5%E3%83%BC%E3%83%90%E3%83%BC%E9%98%B2%E8%A1%9B%E3%81%AE%E5%9F%BA%E6%9C%AC-%E4%B8%AD%E5%B3%B6-%E8%83%BD%E5%92%8C/dp/4798132381)
