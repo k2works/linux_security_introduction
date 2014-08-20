@@ -31,7 +31,17 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
   config.vm.provision "shell", inline: script
 
-  config.vm.network "private_network", ip: "192.168.33.10"
+#  config.vm.network "private_network", ip: "192.168.33.10"
+
+  config.vm.define :host1 do | host1 |
+    host1.vm.hostname = "host1"
+    host1.vm.network :private_network, ip: "192.168.33.10", virtualbox__intnet: "intnet"
+  end
+
+  config.vm.define :host2 do | host2 |
+    host2.vm.hostname = "host2"
+    host2.vm.network :private_network, ip: "192.168.33.20", virtualbox__intnet: "intnet"
+  end
 
   # Create a public network, which generally matched to bridged network.
   # Bridged networks make the machine appear as another physical device on

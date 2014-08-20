@@ -795,13 +795,740 @@ httpd_enable_homedirsを永続的にonにする
 #### ファイルのコピーとバックアップ
 
 ## <a name="7">システムログの管理</a>
+### システムログの概要
+#### rsyslogの設定
+_/etc/rsyslog.conf_
+```bash
+# cat /etc/rsyslog.conf
+# rsyslog v5 configuration file
+
+# For more information see /usr/share/doc/rsyslog-*/rsyslog_conf.html
+# If you experience problems, see http://www.rsyslog.com/doc/troubleshoot.html
+
+#### MODULES ####
+
+$ModLoad imuxsock # provides support for local system logging (e.g. via logger command)
+$ModLoad imklog   # provides kernel logging support (previously done by rklogd)
+#$ModLoad immark  # provides --MARK-- message capability
+
+# Provides UDP syslog reception
+#$ModLoad imudp
+#$UDPServerRun 514
+
+# Provides TCP syslog reception
+#$ModLoad imtcp
+#$InputTCPServerRun 514
+
+
+#### GLOBAL DIRECTIVES ####
+
+# Use default timestamp format
+$ActionFileDefaultTemplate RSYSLOG_TraditionalFileFormat
+
+# File syncing capability is disabled by default. This feature is usually not required,
+# not useful and an extreme performance hit
+#$ActionFileEnableSync on
+
+# Include all config files in /etc/rsyslog.d/
+$IncludeConfig /etc/rsyslog.d/*.conf
+
+
+#### RULES ####
+
+# Log all kernel messages to the console.
+# Logging much else clutters up the screen.
+#kern.*                                                 /dev/console
+
+# Log anything (except mail) of level info or higher.
+# Don't log private authentication messages!
+*.info;mail.none;authpriv.none;cron.none                /var/log/messages
+
+# The authpriv file has restricted access.
+authpriv.*                                              /var/log/secure
+
+# Log all the mail messages in one place.
+mail.*                                                  -/var/log/maillog
+
+
+# Log cron stuff
+cron.*                                                  /var/log/cron
+
+# Everybody gets emergency messages
+*.emerg                                                 *
+
+# Save news errors of level crit and higher in a special file.
+uucp,news.crit                                          /var/log/spooler
+
+# Save boot messages also to boot.log
+local7.*                                                /var/log/boot.log
+
+
+# ### begin forwarding rule ###
+# The statement between the begin ... end define a SINGLE forwarding
+# rule. They belong together, do NOT split them. If you create multiple
+# forwarding rules, duplicate the whole block!
+# Remote Logging (we use TCP for reliable delivery)
+#
+# An on-disk queue is created for this action. If the remote host is
+# down, messages are spooled to disk and sent when it is up again.
+#$WorkDirectory /var/lib/rsyslog # where to place spool files
+#$ActionQueueFileName fwdRule1 # unique name prefix for spool files
+#$ActionQueueMaxDiskSpace 1g   # 1gb space limit (use as much as possible)
+#$ActionQueueSaveOnShutdown on # save messages to disk on shutdown
+#$ActionQueueType LinkedList   # run asynchronously
+#$ActionResumeRetryCount -1    # infinite retries if host is down
+# remote host is: name/ip:port, e.g. 192.168.0.1:514, port optional
+#*.* @@remote-host:514
+# ### end of the forwarding rule ###
+```
+#### ログサーバーの設定
+ログを192.168.11.2のホストに送る(UDP)  
+```
+*.warning        @192.168.11.2
+```
+ログサーバーの/etc/rsyslog.confの設定(UDP)  
+```
+$ModLoad imudp.so
+$UDPServerRun 514
+```
+ログを192.168.11.2のホストに送る(TCP)  
+```
+*.warning        @192.168.11.2
+```
+ログサーバーの/etc/rsyslog.confの設定(TCP)  
+```
+$ModLoad imtcp.so
+$TCPServerRun 514
+```
+ログサーバーの/etc/rsyslog.confの設定(TCP 10514番ポート)  
+```
+$ModLoad imtcp.so
+$TCPServerRun 10514
+```
+ログを192.168.11.2のホストに送る(TCP 10514番ポート)
+```
+*.warning        @192.168.11.2:10514
+```
+#### ログのローテーション
+```
+# cat /etc/logrotate.conf
+# see "man logrotate" for details
+# rotate log files weekly
+weekly
+
+# keep 4 weeks worth of backlogs
+rotate 4
+
+# create new (empty) log files after rotating old ones
+create
+
+# use date as a suffix of the rotated file
+dateext
+
+# uncomment this if you want your log files compressed
+#compress
+
+# RPM packages drop log rotation information into this directory
+include /etc/logrotate.d
+
+# no packages own wtmp and btmp -- we'll rotate them here
+/var/log/wtmp {
+    monthly
+    create 0664 root utmp
+        minsize 1M
+    rotate 1
+}
+
+/var/log/btmp {
+    missingok
+    monthly
+    create 0600 root utmp
+    rotate 1
+}
+```
+### ログの監視
+#### ログファイルの監視
+|  ログファイル    | 説明         |
+|:---------------|:-------------|
+| var/log/message|システムの汎用ログファイル  |
+| var/log/secure |認証関連の記録 |
+| var/log/boot.log|サービスの起動／停止の記録 |
+| var/log/cron   |cronジョブの実行結果 |
+| var/log/dmesg  |カーネルが出力するメッセージの記録 |
+| var/log/lastlog|ログインの記録 |
+| var/log/maillog|メールサブシステムの記録 |
+| var/log/wtmp   |ログインの記録 |
+| var/log/yum.log|YUMによるパッケージ情報操作記録 |
+
+#### logwatch
+logwatchの確認  
+```bash
+$ rpm -q logwatch
+```
+logwatchのインストール  
+```bash
+$ yum install logwatch
+```
+設定ファイルは_/usr/share/logwatch/default.conf/logwatch.conf_
+
+#### swatch
+swatchのインストール  
+```bash
+# yum install swatch perl-File-Tail
+```
+_/root/.swatchrc_  
+```
+watchfor /Accepted password/
+  echo
+```
+swatchの起動
+```
+# swatch -c .swatchrc -t /var/log/secure
+
+*** swatch version 3.2.3 (pid:1200) started at 2014年  8月 19日 火曜日 01:06:24 UTC
+```
+swatchの設定
+```
+watchfor /パターン/
+      アクション
+```
+|  アクションの例  | 説明         |
+|:---------------|:-------------|
+| echo           |標準出力に出力する |
+| execコマンド    |指定したコマンドを実行する |
+| bell           |ベルを鳴らす(回数指定可能) |
+| mail addresses=メールアドレス,subject=件名 |指定したメールアドレスにメッセージを送信する |
+
+swatchの設定例
+```
+watchfor /Failed \(login|password\)/i
+  echo
+  mail root@localhost,subject="Failed Login"
+```
+バックグラウンドでswatchを実行
+```
+# swatch -c .swatchrc -t /var/log/secure --daemon
+```
 ## <a name="8">セキュリティチェックと侵入探知</a>
+### ポートスキャンとパケットキャプチャ
+#### nmap
+nmapのインストール
+```bash
+# yum -y install nmap
+```
+192.168.33.20をポートスキャン
+```bash
+$ nmap 192.168.33.20
+
+Starting Nmap 5.51 ( http://nmap.org ) at 2014-08-19 01:43 UTC
+Nmap scan report for 192.168.33.20
+Host is up (0.0040s latency).
+Not shown: 998 closed ports
+PORT    STATE SERVICE
+22/tcp  open  ssh
+111/tcp open  rpcbind
+
+Nmap done: 1 IP address (1 host up) scanned in 0.25 seconds
+```
+サーバーソフトウェアの詳細を調べる
+```bash
+$ nmap -A 192.168.33.20
+
+Starting Nmap 5.51 ( http://nmap.org ) at 2014-08-19 01:45 UTC
+Nmap scan report for 192.168.33.20
+Host is up (0.0031s latency).
+Not shown: 998 closed ports
+PORT    STATE SERVICE VERSION
+22/tcp  open  ssh     OpenSSH 5.3 (protocol 2.0)
+| ssh-hostkey: 1024 5e:98:a6:5a:e4:1d:61:9a:31:97:1e:8b:68:d5:92:82 (DSA)
+|_2048 c4:4d:f9:05:09:31:33:05:cd:99:52:5b:fc:e0:10:b5 (RSA)
+111/tcp open  rpcbind
+
+Service detection performed. Please report any incorrect results at http://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 6.64 seconds
+```
+Xmasツリースキャン
+```bash
+$ sudo nmap -sX 192.168.33.20
+
+Starting Nmap 5.51 ( http://nmap.org ) at 2014-08-19 01:55 UTC
+Nmap scan report for 192.168.33.20
+Host is up (0.0010s latency).
+Not shown: 998 closed ports
+PORT    STATE         SERVICE
+22/tcp  open|filtered ssh
+111/tcp open|filtered rpcbind
+MAC Address: 08:00:27:2F:7D:D6 (Cadmus Computer Systems)
+
+Nmap done: 1 IP address (1 host up) scanned in 2.44 seconds
+```
+全てのポートをスキャン
+```
+$ nmap -p 0-65535 192.168.33.20
+
+Starting Nmap 5.51 ( http://nmap.org ) at 2014-08-19 01:57 UTC
+Nmap scan report for 192.168.33.20
+Host is up (0.0022s latency).
+Not shown: 65533 closed ports
+PORT      STATE SERVICE
+22/tcp    open  ssh
+111/tcp   open  rpcbind
+35186/tcp open  unknown
+
+Nmap done: 1 IP address (1 host up) scanned in 10.84 seconds
+```
+1023番までと60000番以降のポートをスキャン
+```bash
+$ nmap -p -01023,60000- 192.168.33.20
+
+Starting Nmap 5.51 ( http://nmap.org ) at 2014-08-19 01:58 UTC
+Nmap scan report for 192.168.33.20
+Host is up (0.0037s latency).
+Not shown: 6557 closed ports
+PORT    STATE SERVICE
+22/tcp  open  ssh
+111/tcp open  rpcbind
+
+Nmap done: 1 IP address (1 host up) scanned in 1.15 seconds
+```
+#### tcpdump
+53番ポートへのアクセスの監視  
+```bash
+$ sudo tcpdump -nli eth0 port 53
+tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+listening on eth0, link-type EN10MB (Ethernet), capture size 65535 bytes
+02:16:00.932490 IP 10.0.2.15.51321 > 8.8.8.8.domain: 37346+ A? www.yahoo.com. (31)
+02:16:00.932765 IP 10.0.2.15.51321 > 8.8.8.8.domain: 62438+ AAAA? www.yahoo.com. (31)
+```
+53番ポートの通信内容を表示
+```bash
+$ sudo tcpdump -X -i eth0 port 53
+tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+listening on eth0, link-type EN10MB (Ethernet), capture size 65535 bytes
+02:23:59.481956 IP 10.0.2.15.42014 > google-public-dns-a.google.com.domain: 36744+ A? www.yahoo.co.jp. (33)
+        0x0000:  4500 003d 2aa6 4000 4011 f3eb 0a00 020f  E..=*.@.@.......
+        0x0010:  0808 0808 a41e 0035 0029 1c59 8f88 0100  .......5.).Y....
+        0x0020:  0001 0000 0000 0000 0377 7777 0579 6168  .........www.yah
+        0x0030:  6f6f 0263 6f02 6a70 0000 0100 01         oo.co.jp.....
+```
+ICMPパケットを監視
+```bash
+$ sudo tcpdump -nli eth0 proto \\icmp
+tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+listening on eth0, link-type EN10MB (Ethernet), capture size 65535 bytes
+```
+telnet接続を監視
+```bash
+$ sudo tcpdump -nli eth0 port 23
+tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+listening on eth0, link-type EN10MB (Ethernet), capture size 65535 bytes
+```
+### Tripwire
+#### Tripwireの設定
+Tripwireのインストール
+```bash
+# yum install tripwire
+```
+サイトキーとローカルキーの生成
+```
+# tripwire-setup-keyfiles
+```
+#### Tripwireの設定
+Tripwireの設定ファイル等(_/etc/tripwire/_)
+
+|  ファイル名  | 説明         |
+|:---------------|:-------------|
+| tw.cfg         | Tripwireの全体設定ファイル|
+| twcfg.txt      | 全体設定ファイルのひな形|
+| tw.pl          | ポリシーファイル|
+| twpol.txt      | ポリシーファイルのひな形|
+| site.key       | サイトキーファイル|
+| ホスト名.local.key   | ホストキーファイル|
+
+tw.cfgファイルの生成
+```bash
+# cd /etc/tripwire/
+# twadmin -m F -c tw.cfg -S site.key twcfg.txt
+Please enter your site passphrase:
+Wrote configuration file: /etc/tripwire/tw.cfg
+```
+tw.polファイルの生成
+```bash
+# twadmin -m P -S site.key twpol.txt
+Please enter your site passphrase:
+Wrote policy file: /etc/tripwire/tw.pol
+```
+#### Tripwireの運用
+ベースラインデータベースの初期化
+```bash
+# tripwire --init
+Please enter your local passphrase:
+Parsing policy file: /etc/tripwire/tw.pol
+Generating the database...
+```
+tw.polファイルの再生性とベースラインデータベースの再作成
+```bash
+# twadmin -m P -S site.key twpol.txt
+Please enter your site passphrase:
+Wrote policy file: /etc/tripwire/tw.pol
+# tripwire --init
+Please enter your local passphrase:
+Parsing policy file: /etc/tripwire/tw.pol
+Generating the database...
+```
+改ざんチェック
+```bash
+# tripwire --check
+```
+レポートの表示
+```bash
+# twprint -m r -r /var/lib/tripwire/report/host1-20140819-031031.twr
+```
+ベースラインデータベースのアップデート
+```bash
+# tripwire -m u -r /var/lib/tripwire/report/host1-20140819-031031.twr
+```
+### Rootkit Humterとfail2banの利用
+#### Rootkit Hunter
+Rootkit Hunterのインストール
+```bash
+# yum install rkhunter
+```
+rootkitデータベースのアップデート
+```bash
+# rkhunter --update
+[ Rootkit Hunter version 1.4.2 ]
+
+Checking rkhunter data files...
+  Checking file mirrors.dat                                  [ No update ]
+  Checking file programs_bad.dat                             [ No update ]
+  Checking file backdoorports.dat                            [ No update ]
+  Checking file suspscan.dat                                 [ Updated ]
+  Checking file i18n/cn                                      [ No update ]
+  Checking file i18n/de                                      [ Updated ]
+  Checking file i18n/en                                      [ No update ]
+  Checking file i18n/tr                                      [ Updated ]
+  Checking file i18n/tr.utf8                                 [ Updated ]
+  Checking file i18n/zh                                      [ Updated ]
+  Checking file i18n/zh.utf8                                 [ Updated ]
+```
+Rootkit Hunterの実行
+```bash
+# rkhunter --check
+```
+#### fail2ban
+fail2banのインストール
+```bash
+# yum install fail2ban
+```
++ 設定ファイル_/etc/fail2ban/fail2ban.conf_  
++ jailの設定_/etc/fail2ban/jail.conf_  
+
+fail2banの起動
+```bash
+# service fail2ban start
+```
+iptablesによるfail2banの確認
+```bash
+# iptables -L
+Chain INPUT (policy ACCEPT)
+target     prot opt source               destination
+fail2ban-SSH  tcp  --  anywhere             anywhere            tcp dpt:ssh
+
+Chain FORWARD (policy ACCEPT)
+target     prot opt source               destination
+
+Chain OUTPUT (policy ACCEPT)
+target     prot opt source               destination
+
+Chain fail2ban-SSH (1 references)
+target     prot opt source               destination
+REJECT     all  --  192.168.33.20        anywhere            reject-with icmp-port-unreachable
+RETURN     all  --  anywhere             anywhere
+```
+ssh-iptablesの状況を表示
+```bash
+# fail2ban-client status ssh-iptables
+Status for the jail: ssh-iptables
+|- filter
+|  |- File list:        /var/log/secure
+|  |- Currently failed: 1
+|  `- Total failed:     6
+`- action
+   |- Currently banned: 1
+   |  `- IP list:       192.168.33.20
+   `- Total banned:     1
+```
+
 ## <a name="9">DNSサーバーのセキュリティ</a>
+### BINDの基本設定
+#### BINDのインストール
+```bash
+# yum install bin bind-chroot
+```
+起動
+```bash
+# rndc-confgen -a -r /dev/urandom -t /var/named/chroot
+# service named start
+```
+#### rndcコマンド
+```bash
+# chmod o-rwx /etc/rndc.key
+```
+example.comゾーンを再度読み込み
+```bash
+# rndc reload example.com
+```
+設定ファイルと新規ゾーンのみ再読込
+```bash
+rndc reconfig
+```
+BINDの再起動
+```bash
+service named restart
+```
 ## <a name="10">Webサーバーのセキュリティ</a>
+### Apacheの基本
+#### Apacheのインストールと基本
+httpdパッケージの確認
+```bash
+# rpm -q httpd
+```
+Apacheと関連パッケージのインストール
+```bash
+# yum groupinstall "Web Server"
+```
+Apacheの設定ファイル
+
+|  ファイル名  | 説明         |
+|:---------------|:-------------|
+| /etc/httpd/conf/httpd.conf | メイン設定ファイル|
+| /etc/httpd/conf/magic | MIMEタイプの設定|
+| /etc/httpd/conf.d/manual.conf | オンラインマニュアルの設定|
+| /etc/httpd/conf.d/perl.conf| Perlの設定(mod_perlをインストールした場合)|
+| /etc/httpd/conf.d/php.conf| PHPの設定(mod_phpをインストールした場合)|
+| /etc/httpd/conf.d/ssl.conf| SSL/TLSの設定(mod_sslをインストールした場合)|
+
+Apacheを起動する
+```bash
+# service httpd start
+```
+設定の再読み込み
+```bash
+# service httpd reload
+```
+Apacheの再起動
+```bash
+# service httpd restart
+```
+Apacheの安全な再起動
+```bash
+# service httpd graceful
+```
+
 ## <a name="11">メールサーバーのセキュリティ</a>
+### メールサーバーの基礎
+#### Postfixのインストールと基本
+postfixパッケージの確認
+```bash
+# rpm -q postfix
+```
+#### Dovecotのインストールと基本
+dovecotパッケージの確認
+```bash
+# rpm -q dovecot
+```
+Dovecotのインストール
+```bash
+# yum install dovecot
+```
 ## <a name="12">FTPサーバーのセキュリティ</a>
+### FTPの基本
+lftpインストール
+```bash
+# yum install lftp
+```
+vsftpdのインストール
+```bash
+# yum install vsftpd
+# service vsftpd start
+```
+設定ファイルは_/etc/vsftpd/vsftpd.conf_  
+
 ## <a name="13">SSH</a>
+前提としてhost1とhost2にcentuserが存在すること
+
+### SSHの基本
+鍵のフィンガープリントを確認
+```bash
+# ssh-keygen -i
+```
+### 公開鍵の作成
+```bash
+$ ssh-keygen -t rsa
+Generating public/private rsa key pair.
+Enter file in which to save the key (/home/centuser/.ssh/id_rsa):
+Created directory '/home/centuser/.ssh'.
+Enter passphrase (empty for no passphrase):
+Enter same passphrase again:
+Your identification has been saved in /home/centuser/.ssh/id_rsa.
+Your public key has been saved in /home/centuser/.ssh/id_rsa.pub.
+The key fingerprint is:
+ce:0b:3f:79:82:9f:aa:ad:e2:4e:e8:2d:4b:38:44:ce centuser@host1
+The key's randomart image is:
++--[ RSA 2048]----+
+|                 |
+|                 |
+| .               |
+|+                |
+| E      S        |
+|o.     o         |
+|+..   ..o.       |
+|o+o  ..o+o.      |
+| ==ooooo=+       |
++-----------------+
+```
+公開鍵をサーバーに登録
+```bash
+$ ssh-copy-id centuser@192.168.33.20
+Could not open a connection to your authentication agent.
+centuser@192.168.33.20's password:
+Now try logging into the machine, with "ssh 'centuser@192.168.33.20'", and check in:
+
+  .ssh/authorized_keys
+
+to make sure we haven't added extra keys that you weren't expecting.
+```
+公開鍵認証を使ったSSHログイン
+```bash
+$ ssh 192.168.33.20
+```
+公開鍵ファイルをコピー
+```bash
+$ scp ~/.ssh/id_rsa.pub 192.168.33.20:publickey
+centuser@192.168.33.20's password:
+id_rsa.pub                                                                                                                 100%  396     0.4KB/s   00:00
+```
+192.168.33.20にSSHでログイン
+```
+$ ssh 192.168.33.20
+centuser@192.168.33.20's password:
+Last login: Wed Aug 20 08:22:04 2014 from 192.168.33.10
+```
+authorized_keysに公開鍵を登録
+```
+$ cat publickey >> ~/.ssh/authorized_keys
+```
+authorized_keysファイルのパーミッションを変更
+```bash
+$ chmod 600 ~/.ssh/authorized_keys
+```
+publickeyファイルを削除
+```bash
+$ rm publickey
+```
+### OpenSSHサーバー
+#### SSHサーバーの基本設定
+|  設定項目 | 説明         |
+|:---------------|:-------------|
+| Port | SSHで使うポート番号 |
+| Protocol | SSHのバージョン(１または２または両方) |
+| HostKey | ホストの秘密鍵ファイル |
+| PermitRootLogin | rootでもログインを許可するかどうか(yes,no,without-password,forced-commands-onlyのいずれか)|
+| RSAAuthentication | SSHバージョン１での公開鍵認証を使用するかどうか(yes,no)|
+| PubkeyAuthentication | SSHバージョン２での公開鍵認証を使用するかどうか(yes,no)|
+| AuthorizedKeysFile | 公開鍵が格納されるファイル名 |
+| PermitEmptyPasswords | 空のパスワードを許可するかどうか (yes,no) |
+| PasswordAuthentication | パスワード認証を許可するかどうか(yes,no) |
+| AllowUsers | 接続を許可するユーザーのリスト |
+| DenyUsers | 接続を拒否するユーザーのリスト |
+| LoginGraceTime | ログイン認証の待ち時間(デフォルトは120秒)|
+| MaxAuthTries | ログイン認証の最大再試行回数(デフォルトは6秒)|
+| UsePAM | PAM認証を利用するかどうか(yes,no)|
+
+設定変更後はSSHサーバーを再起動する
+```bash
+# service sshd restart
+```
+TCP Wrapperによるアクセス制御  
+/etc/hosts.denyの設定例  
+```
+ALL: ALL
+```
+/etc/hosts.allowの設定例  
+```
+sshd: 192.168.11.2 *.example.com
+```
+### SSHクライアント
+#### SSHリモートログイン
+指定したホストにSSHで接続
+```bash
+$ ssh 192.168.33.20
+```
+ユーザー名を指定して接続
+```
+$ ssh centuser@192.168.33.20
+```
+SSHでコマンドのみ実行
+```bash
+$ ssh 192.168.33.20 df
+```
+#### SSHリモートコピー
+リモートホストからローカルホストへのファイルコピー（１）
+```bash
+$ scp /etc/hosts 192.168.33.20:/tmp
+```
+リモートホストからローカルホストへのファイルコピー（２）
+```bash
+$ scp 192.168.33.20:/etc/hosts .
+```
+ユーザー名を指定したファイルコピー
+```bash
+$ touch data.txt
+$ scp data.txt centuser@192.168.33.20:
+```
+ポート番号を指定したファイルコピー
+```bash
+$ scp -P 22 /etc/hosts 192.168.33.20:/tmp
+```
+#### sftp
+```bash
+$ sftp 192.168.33.20
+```
+#### ポート転送
+SSHポート転送
+```bash
+$ ssh -f -N centuser@192.168.33.20 -L 10110:192.168.33.20:110
+```
+#### SSH Agent
+ssh-agentの利用を開始
+```bash
+$ ssh-agent bash
+```
+パスフレーズを登録
+```bash
+$ ssh-add
+Identity added: /home/centuser/.ssh/id_rsa (/home/centuser/.ssh/id_rsa)
+```
+秘密鍵の一覧を表示
+```bash
+$ ssh-add -l
+2048 ce:0b:3f:79:82:9f:aa:ad:e2:4e:e8:2d:4b:38:44:ce /home/centuser/.ssh/id_rsa (RSA)
+```
+#### SSHクライアントの設定
+_/etc/ssh/ssh_config_  
+
+|  設定項目 | 説明         |
+|:---------------|:-------------|
+| Port | ポート番号を指定する |
+| Protocol | 利用するSSHプロトコルバージョン |
+| PasswordAuthentication |  パスワード認証を使用するかどうか(yes,no)|
+| RSAAuthentication | 公開鍵認証を使用するかどうか(yes,no) |
+| IdentityFile | 秘密鍵ファイルを指定する |
+
+SSHログイン後に自動実行したいコマンドがある場合は_/etc/ssh/sshrc_または_~/.ssh/rc_ファイルに設定。
 
 # 参照
 + [Linuxサーバーセキュリティ徹底入門](http://www.amazon.co.jp/Linux%E3%82%B5%E3%83%BC%E3%83%90%E3%83%BC%E3%82%BB%E3%82%AD%E3%83%A5%E3%83%AA%E3%83%86%E3%82%A3%E5%BE%B9%E5%BA%95%E5%85%A5%E9%96%80-%E3%83%BC%E3%83%97%E3%83%B3%E3%82%BD%E3%83%BC%E3%82%B9%E3%81%AB%E3%82%88%E3%82%8B%E3%82%B5%E3%83%BC%E3%83%90%E3%83%BC%E9%98%B2%E8%A1%9B%E3%81%AE%E5%9F%BA%E6%9C%AC-%E4%B8%AD%E5%B3%B6-%E8%83%BD%E5%92%8C/dp/4798132381)
 + [Vagrant + シェルスクリプトで簡単プロビジョニング](http://www.ryuzee.com/contents/blog/6667)
++ [Vagrant で複数のVM を立ち上げて、お互いに通信できるようにするには](http://qiita.com/sho7650/items/cf5a586713f0aec86dc0)
